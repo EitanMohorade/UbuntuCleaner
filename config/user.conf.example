@@ -1,0 +1,12 @@
+# config/user.conf — configuración personal
+# Este archivo está en .gitignore: tus cambios no se versionan.
+# Sobrescribí solo las variables que querés cambiar.
+# Las que no aparezcan acá toman el valor de default.conf
+
+# Ejemplos:
+# LOG_DAYS=14
+# TMP_DAYS=2
+# CACHE_DAYS=60
+# ENABLE_SNAP_CLEANUP=false
+# ENABLE_FSCK=false
+# CACHE_EXCLUDE_PATHS=".cache/mozilla .cache/google-chrome .cache/mi-app-custom"
