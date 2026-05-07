@@ -1,10 +1,6 @@
 #!/bin/bash
-# lib/integrity.sh — verificación e integridad de paquetes
-# Equivalente a sfc /scannow de Windows.
-#
-# Política mixta:
-#   dpkg --configure -a + apt --fix-broken → CRÍTICO
-#   dpkg --audit + debsums                 → TOLERABLE
+# Verificacion e integridad de paquetes.
+# Reparacion es critica; auditoria es tolerable.
 
 run_integrity() {
     step "INTEGRITY" "Verificación e integridad de paquetes"
@@ -14,20 +10,16 @@ run_integrity() {
     [[ "${ENABLE_DEBSUMS:-true}" == true ]] && _check_debsums || true
 }
 
-# ── Reparación de paquetes  (CRÍTICO) ─────────────────────────
 _repair_packages() {
     info "Reparando instalaciones incompletas (dpkg + apt)..."
 
-    # Si esto falla, el sistema puede estar en estado inconsistente.
-    # Correcto que set -e lo detenga: continuar con un dpkg roto
-    # podría empeorar la situación.
+    # Si falla, el script debe detenerse por consistencia del sistema.
     maybe_run dpkg --configure -a
     maybe_run apt --fix-broken install -y -qq
 
     ok "Instalaciones reparadas"
 }
 
-# ── Auditoría dpkg  (TOLERABLE) ───────────────────────────────
 _audit_dpkg() {
     info "Auditando base de datos de dpkg..."
 
@@ -41,13 +33,10 @@ _audit_dpkg() {
     fi
 }
 
-# ── debsums  (TOLERABLE) ──────────────────────────────────────
 _check_debsums() {
     info "Verificando integridad de archivos con debsums..."
 
-    # debsums puede dar falsos positivos en archivos de configuración
-    # modificados intencionalmente por el usuario o por otros paquetes.
-    # Por eso es TOLERABLE, no crítico.
+    # Puede reportar cambios validos en archivos de configuracion.
 
     if ! command -v debsums &>/dev/null; then
         run_tolerant "instalar debsums" apt install -y -qq debsums

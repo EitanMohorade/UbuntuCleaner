@@ -1,13 +1,12 @@
 #!/bin/bash
-# lib/config.sh — carga y validación de configuración
-# Sourced después de core.sh; no ejecuta nada al cargar.
+# Carga y validacion de configuracion.
 
 load_config() {
     local root_dir="$1"
     local default_conf="${root_dir}/config/default.conf"
     local user_conf="${root_dir}/config/user.conf"
 
-    # 1. Cargar valores por defecto (siempre requerido)
+    # Carga defaults obligatorios.
     if [[ ! -f "$default_conf" ]]; then
         err "Archivo de config no encontrado: $default_conf"
         exit 1
@@ -15,7 +14,7 @@ load_config() {
     # shellcheck source=/dev/null
     source "$default_conf"
 
-    # 2. Si existe user.conf, sus valores sobreescriben los defaults
+    # Carga overrides de usuario si existen.
     if [[ -f "$user_conf" ]]; then
         # shellcheck source=/dev/null
         source "$user_conf"
@@ -26,7 +25,7 @@ load_config() {
 validate_config() {
     local errors=0
 
-    # Verificar que las variables requeridas sean enteros positivos
+    # Valida enteros positivos requeridos.
     for var in LOG_DAYS TMP_DAYS CACHE_DAYS SCRIPT_LOG_KEEP_DAYS; do
         local val="${!var:-}"
         if [[ -z "$val" ]] || ! [[ "$val" =~ ^[0-9]+$ ]] || (( val < 1 )); then
@@ -35,7 +34,7 @@ validate_config() {
         fi
     done
 
-    # Verificar booleanos
+    # Valida booleanos.
     for var in ENABLE_SNAP_CLEANUP ENABLE_FSCK ENABLE_DEBSUMS ENABLE_LOGROTATE; do
         local val="${!var:-}"
         if [[ "$val" != "true" && "$val" != "false" ]]; then

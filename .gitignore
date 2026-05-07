@@ -1,0 +1,10 @@
+# Configuracion personal.
+config/user.conf
+
+# Estado y logs generados.
+state/
+logs/
+
+# Archivos del sistema/editor.
+*.swp
+.DS_Store

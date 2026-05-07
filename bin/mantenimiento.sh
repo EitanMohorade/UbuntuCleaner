@@ -1,29 +1,16 @@
 #!/bin/bash
 
-# =============================================================
-#  bin/mantenimiento.sh — entrypoint
-#  Uso:
-#    sudo bash bin/mantenimiento.sh
-#    sudo bash bin/mantenimiento.sh --dry-run
-#    sudo bash bin/mantenimiento.sh --only=apt,cleanup
-#    sudo bash bin/mantenimiento.sh --skip=disk
-#    sudo bash bin/mantenimiento.sh --help
-# =============================================================
+# Entrypoint principal.
+# Uso recomendado: sudo mantenimiento-ubuntu [opciones]
 
 set -euo pipefail
 
-# ── Paths ─────────────────────────────────────────────────────
-# readlink -f resuelve el symlink antes de calcular el directorio.
-# Sin esto, al ejecutar vía symlink (ej: /usr/local/bin/mantenimiento-ubuntu),
-# BASH_SOURCE[0] apunta al symlink → SCRIPT_DIR queda como /usr/local/bin
-# y ROOT_DIR como /usr/local en vez del directorio real del proyecto.
+# Resuelve el path real para soportar ejecucion via symlink.
 REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# ── Sourcing de librerías (en orden de dependencia) ───────────
-# core.sh primero: define funciones de logging usadas por todos.
-# config.sh segundo: carga vars usadas por los módulos.
+# Carga librerias compartidas y modulos.
 source "${ROOT_DIR}/lib/core.sh"
 source "${ROOT_DIR}/lib/config.sh"
 source "${ROOT_DIR}/lib/apt.sh"
@@ -31,10 +18,10 @@ source "${ROOT_DIR}/lib/cleanup.sh"
 source "${ROOT_DIR}/lib/integrity.sh"
 source "${ROOT_DIR}/lib/disk.sh"
 
-# ── Módulos disponibles (en orden de ejecución) ───────────────
+# Orden de ejecucion de modulos.
 MODULES_AVAILABLE=(apt cleanup integrity disk)
 
-# ── Parseo de argumentos ──────────────────────────────────────
+# Argumentos CLI.
 DRY_RUN=false
 MODULES_ONLY=()
 MODULES_SKIP=()
@@ -79,7 +66,7 @@ for arg in "$@"; do
     esac
 done
 
-# ── Validar módulos pasados por el usuario ────────────────────
+# Valida nombres de modulos pasados por el usuario.
 _validate_module_names() {
     local -a input=("$@")
     for m in "${input[@]}"; do
@@ -96,11 +83,11 @@ _validate_module_names() {
 [[ ${#MODULES_ONLY[@]} -gt 0 ]] && _validate_module_names "${MODULES_ONLY[@]}"
 [[ ${#MODULES_SKIP[@]} -gt 0 ]] && _validate_module_names "${MODULES_SKIP[@]}"
 
-# ── Resolver qué módulos correr ───────────────────────────────
+# Determina si un modulo debe ejecutarse.
 _should_run() {
     local module="$1"
 
-    # Si hay --only, solo correr los mencionados
+    # Si hay --only, ejecutar solo los listados.
     if [[ ${#MODULES_ONLY[@]} -gt 0 ]]; then
         for m in "${MODULES_ONLY[@]}"; do
             [[ "$m" == "$module" ]] && return 0
@@ -108,7 +95,7 @@ _should_run() {
         return 1
     fi
 
-    # Si hay --skip, omitir los mencionados
+    # Si hay --skip, omitir los listados.
     for m in "${MODULES_SKIP[@]}"; do
         [[ "$m" == "$module" ]] && return 1
     done
@@ -116,25 +103,25 @@ _should_run() {
     return 0
 }
 
-# ── Verificación de root ──────────────────────────────────────
+# Requiere privilegios de root.
 if [[ $EUID -ne 0 ]]; then
     echo -e "\033[0;31m  ✘ Este script debe ejecutarse como root: sudo bash bin/mantenimiento.sh\033[0m"
     exit 1
 fi
 
-# ── Cargar y validar configuración ───────────────────────────
+# Carga y valida configuracion.
 load_config "$ROOT_DIR"
 validate_config
 
-# ── Setup de log del script ───────────────────────────────────
+# Configuracion de logs.
 LOG_DIR="${ROOT_DIR}/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/$(date '+%Y-%m').log"
 
-# Rotar logs viejos del propio script
+# Limpia logs antiguos del script.
 find "$LOG_DIR" -name "*.log" -mtime +"${SCRIPT_LOG_KEEP_DAYS}" -delete 2>/dev/null || true
 
-# ── Header ────────────────────────────────────────────────────
+# Captura espacio inicial.
 ESPACIO_INICIAL=$(get_used_mb)
 
 _log "${BOLD}"
@@ -147,7 +134,7 @@ _log "  Espacio usado al inicio : ${YELLOW}${ESPACIO_INICIAL} MB${RESET}  (/, /h
 _log "  Fecha                   : $(date '+%d/%m/%Y %H:%M:%S')"
 _log "  Log                     : ${LOG_FILE}\n"
 
-# ── Ejecución de módulos ──────────────────────────────────────
+# Ejecuta modulos.
 MODULES_RAN=()
 
 for module in "${MODULES_AVAILABLE[@]}"; do
@@ -159,7 +146,7 @@ for module in "${MODULES_AVAILABLE[@]}"; do
     fi
 done
 
-# ── Resumen final ─────────────────────────────────────────────
+# Resumen final.
 ESPACIO_FINAL=$(get_used_mb)
 LIBERADO=$(( ESPACIO_INICIAL - ESPACIO_FINAL ))
 
@@ -175,7 +162,7 @@ if [[ "$DRY_RUN" == true ]]; then
 else
     _log "  Espacio usado ahora  : ${GREEN}${ESPACIO_FINAL} MB${RESET}"
     if (( LIBERADO > 0 )); then
-        _log "  Espacio liberado     : ${GREEN}${BOLD}${LIBERADO} MB${RESET} 🎉"
+        _log "  Espacio liberado     : ${GREEN}${BOLD}${LIBERADO} MB${RESET}"
     else
         _log "  Espacio liberado     : ${CYAN}0 MB (el sistema ya estaba limpio)${RESET}"
     fi
@@ -193,6 +180,6 @@ fi
 _log "\n  ${BOLD}Recomendación:${RESET} reiniciá el equipo para aplicar"
 _log "  actualizaciones y el chequeo de disco.\n"
 
-# ── Guardar estado ────────────────────────────────────────────
+# Guarda metadatos de la ejecucion.
 STATE_FILE="${ROOT_DIR}/state/last_run.json"
 save_state "$STATE_FILE" "$ESPACIO_INICIAL" "$ESPACIO_FINAL" "${MODULES_RAN[*]:-}"

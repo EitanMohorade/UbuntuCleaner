@@ -1,10 +1,6 @@
 #!/bin/bash
 
-# =============================================================
-#  install.sh — instalación del proyecto
-#  Crea symlink en /usr/local/bin
-#  Uso: sudo bash install.sh
-# =============================================================
+# install.sh: instala el comando mantenimiento-ubuntu en /usr/local/bin.
 
 set -euo pipefail
 
@@ -16,17 +12,17 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-# Permisos correctos
+# Asegura permiso de ejecucion en el entrypoint.
 chmod +x "${SCRIPT_DIR}/bin/mantenimiento.sh"
 
-# Symlink
+# Recrea el symlink de instalacion.
 if [[ -L "$SYMLINK_TARGET" ]]; then
     rm "$SYMLINK_TARGET"
 fi
 ln -s "${SCRIPT_DIR}/bin/mantenimiento.sh" "$SYMLINK_TARGET"
 echo "✔ Symlink creado: $SYMLINK_TARGET"
 
-# Crear directorios de estado y logs si no existen
+# Crea carpetas usadas en runtime.
 mkdir -p "${SCRIPT_DIR}/state" "${SCRIPT_DIR}/logs"
 echo "✔ Directorios state/ y logs/ listos"
 

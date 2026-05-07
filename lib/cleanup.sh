@@ -1,7 +1,5 @@
 #!/bin/bash
-# lib/cleanup.sh — limpieza de archivos
-# Todas las operaciones son TOLERABLES: un fallo de limpieza
-# no es razón para detener el mantenimiento.
+# Limpieza de archivos no critica: registra errores y continua.
 
 run_cleanup() {
     step "CLEANUP" "Limpieza de archivos"
@@ -12,38 +10,20 @@ run_cleanup() {
     [[ "${ENABLE_SNAP_CLEANUP:-true}" == true ]] && _cleanup_snap || true
 }
 
-# ── Logs ─────────────────────────────────────────────────────
 _cleanup_logs() {
     info "Limpiando logs del sistema (retención: ${LOG_DAYS} días)..."
 
-    # Decisión: solo journalctl para desktop/dev.
-    # En servidor sería preferible: logrotate -f /etc/logrotate.conf
-    # porque respeta las políticas por paquete. Para desktop,
-    # journalctl es suficiente y más seguro (no toca /var/log/*).
+    # Usa journalctl como estrategia de limpieza por defecto.
     run_tolerant "journalctl vacuum" \
         journalctl --vacuum-time="${LOG_DAYS}d"
 
     ok "Logs de systemd depurados"
 }
 
-# ── /tmp ─────────────────────────────────────────────────────
 _cleanup_tmp() {
     info "Limpiando /tmp (archivos regulares >$TMP_DAYS día(s), no abiertos)..."
 
-    # Tres capas de protección:
-    #   -type f  → excluye sockets (-type s), pipes (-type p),
-    #              symlinks (-type l) y directorios. Evita romper
-    #              apps que mantienen sockets en /tmp aunque tengan
-    #              días de antigüedad (X11, DBus, MariaDB, etc.)
-    #
-    #   -mtime   → usamos mtime, no atime. Con relatime (default
-    #              desde Linux 2.6.30), atime solo se actualiza si
-    #              es menor que mtime/ctime → puede quedar congelado
-    #              en archivos leídos pero no escritos.
-    #
-    #   fuser    → descarta archivos con descriptores abiertos.
-    #              Un proceso puede mantener un fd abierto aunque el
-    #              nombre no figure en /proc/*/fd de forma obvia.
+    # Proteccion: solo archivos regulares, por mtime y sin uso activo.
 
     local tmp_borrados=0
 
@@ -75,20 +55,16 @@ _cleanup_tmp() {
     fi
 }
 
-# ── Caché de usuarios ─────────────────────────────────────────
 _cleanup_users() {
     info "Limpiando caché y miniaturas de usuarios (retención: ${CACHE_DAYS} días)..."
 
-    # -mtime (no -atime) por la razón relatime explicada arriba.
-    # Navegadores excluidos: sus índices internos asumen que los archivos
-    # existen. Borrar selectivamente puede corromper la caché.
-    # CACHE_EXCLUDE_PATHS viene de la config.
+    # Usa mtime y excluye rutas definidas en CACHE_EXCLUDE_PATHS.
 
     for home_dir in /home/*/; do
         [[ -d "$home_dir" ]] || continue
         local usuario; usuario=$(basename "$home_dir")
 
-        # Thumbnails
+        # Miniaturas.
         if [[ -d "${home_dir}.cache/thumbnails" ]]; then
             if [[ "${DRY_RUN:-false}" == true ]]; then
                 local n; n=$(find "${home_dir}.cache/thumbnails" -type f \
@@ -101,7 +77,7 @@ _cleanup_users() {
             fi
         fi
 
-        # Papelera
+        # Papelera.
         if [[ -d "${home_dir}.local/share/Trash" ]]; then
             run_tolerant "papelera de $usuario" bash -c \
                 "rm -rf '${home_dir}.local/share/Trash/files/'* \
@@ -109,7 +85,7 @@ _cleanup_users() {
             info "  Papelera de '$usuario' vaciada"
         fi
 
-        # Caché general — construimos los exclusiones desde config
+        # Cache general con exclusiones definidas en config.
         if [[ -d "${home_dir}.cache" ]]; then
             local find_cmd=(find "${home_dir}.cache"
                 -mindepth 1 -maxdepth 3
@@ -133,7 +109,6 @@ _cleanup_users() {
     ok "Caché de usuarios procesada"
 }
 
-# ── Snap ──────────────────────────────────────────────────────
 _cleanup_snap() {
     if ! command -v snap &>/dev/null; then
         info "Snap no instalado, paso omitido"
