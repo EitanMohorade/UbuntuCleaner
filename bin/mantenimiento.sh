@@ -1,27 +1,35 @@
 #!/bin/bash
 
-# Entrypoint principal.
-# Uso recomendado: sudo mantenimiento-ubuntu [opciones]
+# Entry point del script.
+# Uso:
+#   sudo bash bin/mantenimiento.sh
+#   sudo bash bin/mantenimiento.sh --dry-run
+#   sudo bash bin/mantenimiento.sh --only=apt,cleanup,dev
+#   sudo bash bin/mantenimiento.sh --skip=disk
+#   sudo bash bin/mantenimiento.sh --help
 
 set -euo pipefail
 
-# Resuelve el path real para soportar ejecucion via symlink.
+# Rutas del script.
+# readlink -f resuelve el symlink antes de calcular el directorio.
+# Así ROOT_DIR se calcula bien aunque se ejecute desde un enlace.
 REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Carga librerias compartidas y modulos.
+# Carga de módulos.
 source "${ROOT_DIR}/lib/core.sh"
 source "${ROOT_DIR}/lib/config.sh"
 source "${ROOT_DIR}/lib/apt.sh"
 source "${ROOT_DIR}/lib/cleanup.sh"
 source "${ROOT_DIR}/lib/integrity.sh"
 source "${ROOT_DIR}/lib/disk.sh"
+source "${ROOT_DIR}/lib/dev.sh"
 
-# Orden de ejecucion de modulos.
-MODULES_AVAILABLE=(apt cleanup integrity disk)
+# Módulos disponibles.
+MODULES_AVAILABLE=(apt cleanup integrity disk dev)
 
-# Argumentos CLI.
+# Parseo de argumentos.
 DRY_RUN=false
 MODULES_ONLY=()
 MODULES_SKIP=()
@@ -31,42 +39,36 @@ show_help() {
 Uso: sudo bash bin/mantenimiento.sh [opciones]
 
 Opciones:
-  --dry-run            Simula la ejecución sin modificar nada
+  --dry-run            Simula sin modificar nada
   --only=m1,m2,...     Ejecuta solo los módulos indicados
   --skip=m1,m2,...     Omite los módulos indicados
   --help               Muestra esta ayuda
 
 Módulos disponibles: ${MODULES_AVAILABLE[*]}
+  apt        → update, upgrade, autoremove, clean (apt-get)
+  cleanup    → logs, /tmp, caché de usuarios, snap
+  integrity  → dpkg audit + debsums
+  disk       → fsck / btrfs scrub / xfs_repair
+  dev        → Docker, VMs, IDEs, npm/pip/gradle/maven, DBs
 
 Ejemplos:
   sudo bash bin/mantenimiento.sh --dry-run
   sudo bash bin/mantenimiento.sh --only=apt,cleanup
-  sudo bash bin/mantenimiento.sh --skip=disk
+  sudo bash bin/mantenimiento.sh --skip=disk,dev
 EOF
 }
 
 for arg in "$@"; do
     case "$arg" in
-        --dry-run)
-            DRY_RUN=true
-            ;;
-        --only=*)
-            IFS=',' read -ra MODULES_ONLY <<< "${arg#--only=}"
-            ;;
-        --skip=*)
-            IFS=',' read -ra MODULES_SKIP <<< "${arg#--skip=}"
-            ;;
-        --help|-h)
-            show_help; exit 0
-            ;;
-        *)
-            echo "Argumento desconocido: $arg" >&2
-            show_help; exit 1
-            ;;
+        --dry-run)   DRY_RUN=true ;;
+        --only=*)    IFS=',' read -ra MODULES_ONLY <<< "${arg#--only=}" ;;
+        --skip=*)    IFS=',' read -ra MODULES_SKIP <<< "${arg#--skip=}" ;;
+        --help|-h)   show_help; exit 0 ;;
+        *)           echo "Argumento desconocido: $arg" >&2; show_help; exit 1 ;;
     esac
 done
 
-# Valida nombres de modulos pasados por el usuario.
+# Validación de módulos.
 _validate_module_names() {
     local -a input=("$@")
     for m in "${input[@]}"; do
@@ -83,58 +85,48 @@ _validate_module_names() {
 [[ ${#MODULES_ONLY[@]} -gt 0 ]] && _validate_module_names "${MODULES_ONLY[@]}"
 [[ ${#MODULES_SKIP[@]} -gt 0 ]] && _validate_module_names "${MODULES_SKIP[@]}"
 
-# Determina si un modulo debe ejecutarse.
 _should_run() {
     local module="$1"
-
-    # Si hay --only, ejecutar solo los listados.
     if [[ ${#MODULES_ONLY[@]} -gt 0 ]]; then
-        for m in "${MODULES_ONLY[@]}"; do
-            [[ "$m" == "$module" ]] && return 0
-        done
+        for m in "${MODULES_ONLY[@]}"; do [[ "$m" == "$module" ]] && return 0; done
         return 1
     fi
-
-    # Si hay --skip, omitir los listados.
-    for m in "${MODULES_SKIP[@]}"; do
-        [[ "$m" == "$module" ]] && return 1
-    done
-
+    for m in "${MODULES_SKIP[@]}"; do [[ "$m" == "$module" ]] && return 1; done
     return 0
 }
 
-# Requiere privilegios de root.
+# Verifica privilegios de root.
 if [[ $EUID -ne 0 ]]; then
-    echo -e "\033[0;31m  ✘ Este script debe ejecutarse como root: sudo bash bin/mantenimiento.sh\033[0m"
+    echo -e "\033[0;31m  ✘ Ejecutar como root: sudo bash bin/mantenimiento.sh\033[0m"
     exit 1
 fi
 
-# Carga y valida configuracion.
+# Carga y valida configuración.
 load_config "$ROOT_DIR"
 validate_config
 
-# Configuracion de logs.
+# Configura el log.
 LOG_DIR="${ROOT_DIR}/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/$(date '+%Y-%m').log"
-
-# Limpia logs antiguos del script.
 find "$LOG_DIR" -name "*.log" -mtime +"${SCRIPT_LOG_KEEP_DAYS}" -delete 2>/dev/null || true
 
-# Captura espacio inicial.
-ESPACIO_INICIAL=$(get_used_mb)
+# Snapshot inicial de espacio.
+# Se mide antes de cualquier operación.
+BYTES_ANTES=$(get_used_bytes)
 
 _log "${BOLD}"
 _log "╔══════════════════════════════════════════╗"
 _log "║     MANTENIMIENTO DEL SISTEMA UBUNTU     ║"
-[[ "$DRY_RUN" == true ]] && _log "║           *** MODO DRY-RUN ***           ║"
+[[ "$DRY_RUN" == true ]] && \
+_log "║           *** MODO DRY-RUN ***           ║"
 _log "╚══════════════════════════════════════════╝"
 _log "${RESET}"
-_log "  Espacio usado al inicio : ${YELLOW}${ESPACIO_INICIAL} MB${RESET}  (/, /home, /var sumados)"
+_log "  Espacio usado al inicio : ${YELLOW}$(format_bytes "$BYTES_ANTES")${RESET}  (/, /home, /var sumados)"
 _log "  Fecha                   : $(date '+%d/%m/%Y %H:%M:%S')"
 _log "  Log                     : ${LOG_FILE}\n"
 
-# Ejecuta modulos.
+# Ejecución de módulos.
 MODULES_RAN=()
 
 for module in "${MODULES_AVAILABLE[@]}"; do
@@ -146,26 +138,35 @@ for module in "${MODULES_AVAILABLE[@]}"; do
     fi
 done
 
-# Resumen final.
-ESPACIO_FINAL=$(get_used_mb)
-LIBERADO=$(( ESPACIO_INICIAL - ESPACIO_FINAL ))
+# Snapshot final.
+BYTES_DESPUES=$(get_used_bytes)
+BYTES_LIBERADOS=$(( BYTES_ANTES - BYTES_DESPUES ))
 
 _log "\n${BOLD}"
 _log "╔══════════════════════════════════════════╗"
 _log "║              RESUMEN FINAL               ║"
 _log "╚══════════════════════════════════════════╝"
 _log "${RESET}"
-_log "  Espacio usado antes  : ${YELLOW}${ESPACIO_INICIAL} MB${RESET}"
+_log "  Espacio usado antes  : ${YELLOW}$(format_bytes "$BYTES_ANTES")${RESET}"
 
 if [[ "$DRY_RUN" == true ]]; then
     _log "  Espacio usado ahora  : ${CYAN}(sin cambios — modo dry-run)${RESET}"
 else
-    _log "  Espacio usado ahora  : ${GREEN}${ESPACIO_FINAL} MB${RESET}"
-    if (( LIBERADO > 0 )); then
-        _log "  Espacio liberado     : ${GREEN}${BOLD}${LIBERADO} MB${RESET}"
+    _log "  Espacio usado ahora  : ${GREEN}$(format_bytes "$BYTES_DESPUES")${RESET}"
+    if (( BYTES_LIBERADOS > 0 )); then
+        _log "  Espacio liberado     : ${GREEN}${BOLD}$(format_bytes "$BYTES_LIBERADOS")${RESET} 🎉"
+    elif (( BYTES_LIBERADOS < 0 )); then
+        # Puede pasar si una actualización instaló más paquetes de los que quitó.
+        _log "  Espacio usado        : ${YELLOW}+$(format_bytes $(( -BYTES_LIBERADOS ))) (actualizaciones instaladas)${RESET}"
     else
-        _log "  Espacio liberado     : ${CYAN}0 MB (el sistema ya estaba limpio)${RESET}"
+        _log "  Espacio liberado     : ${CYAN}0 B (el sistema ya estaba limpio)${RESET}"
     fi
+
+    # Detalle por filesystem.
+    _log "\n  ${BOLD}Detalle por partición:${RESET}"
+    while IFS=$'\t' read -r mountpoint used_bytes; do
+        printf "    %-20s %s\n" "$mountpoint" "$(format_bytes "$used_bytes")"
+    done < <(get_space_breakdown)
 fi
 
 _log "  Módulos ejecutados   : ${MODULES_RAN[*]:-ninguno}"
@@ -177,9 +178,20 @@ if [[ ${#ERRORES_NO_CRITICOS[@]} -gt 0 ]]; then
     done
 fi
 
-_log "\n  ${BOLD}Recomendación:${RESET} reiniciá el equipo para aplicar"
-_log "  actualizaciones y el chequeo de disco.\n"
+# Verifica si hace falta reiniciar.
+if [[ -f /var/run/reboot-required ]]; then
+    _log ""
+    warn "Reinicio requerido por el sistema"
+    if [[ -f /var/run/reboot-required.pkgs ]]; then
+        pkgs=$(tr '\n' ' ' < /var/run/reboot-required.pkgs)
+        warn "  Paquetes que lo requieren: ${pkgs}"
+    fi
+else
+    _log "  ${CYAN}→ No se requiere reinicio${RESET}"
+fi
 
-# Guarda metadatos de la ejecucion.
+_log ""
+
+# Guarda el estado JSON.
 STATE_FILE="${ROOT_DIR}/state/last_run.json"
-save_state "$STATE_FILE" "$ESPACIO_INICIAL" "$ESPACIO_FINAL" "${MODULES_RAN[*]:-}"
+save_state "$STATE_FILE" "$BYTES_ANTES" "$BYTES_DESPUES" "${MODULES_RAN[*]:-}"
