@@ -1,5 +1,5 @@
 #!/bin/bash
-# Limpieza de archivos no critica: registra errores y continua.
+# Limpieza de archivos tolerante a fallos.
 
 run_cleanup() {
     step "CLEANUP" "Limpieza de archivos"
@@ -10,26 +10,29 @@ run_cleanup() {
     [[ "${ENABLE_SNAP_CLEANUP:-true}" == true ]] && _cleanup_snap || true
 }
 
+# Logs
 _cleanup_logs() {
     info "Limpiando logs del sistema (retención: ${LOG_DAYS} días)..."
 
-    # Usa journalctl como estrategia de limpieza por defecto.
+    # En servidor suele ser mejor logrotate.
     run_tolerant "journalctl vacuum" \
         journalctl --vacuum-time="${LOG_DAYS}d"
 
     ok "Logs de systemd depurados"
 }
 
+# /tmp
 _cleanup_tmp() {
     info "Limpiando /tmp (archivos regulares >$TMP_DAYS día(s), no abiertos)..."
 
-    # Proteccion: solo archivos regulares, por mtime y sin uso activo.
+    # Solo borra archivos regulares viejos y evita los que están en uso.
 
     local tmp_borrados=0
 
     if [[ "${DRY_RUN:-false}" == true ]]; then
         tmp_borrados=$(find /tmp -mindepth 1 -type f -mtime +"$TMP_DAYS" 2>/dev/null | wc -l)
-        info "  [DRY-RUN] Se eliminarían ${tmp_borrados} archivo(s) de /tmp"
+        local tmp_dirs=$(find /tmp -mindepth 1 -type d -empty 2>/dev/null | wc -l)
+        info "  [DRY-RUN] Se eliminarían ${tmp_borrados} archivo(s) y ${tmp_dirs} directorio(s) vacío(s) de /tmp"
         return 0
     fi
 
@@ -49,22 +52,29 @@ _cleanup_tmp() {
 
     ok "/tmp: ${tmp_borrados} archivo(s) eliminado(s)"
 
+    # Luego elimina directorios vacíos que hayan quedado.
+    local dirs_borrados=0
+    dirs_borrados=$(find /tmp -mindepth 1 -type d -empty 2>/dev/null | wc -l)
+    if (( dirs_borrados > 0 )); then
+        find /tmp -mindepth 1 -type d -empty -delete 2>/dev/null || true
+        ok "/tmp: ${dirs_borrados} directorio(s) vacío(s) eliminado(s)"
+    fi
+
     if [[ -d /var/crash ]]; then
         run_tolerant "limpiar /var/crash" bash -c 'rm -f /var/crash/*'
         ok "Reportes de crash eliminados"
     fi
 }
 
+# Caché de usuarios
 _cleanup_users() {
     info "Limpiando caché y miniaturas de usuarios (retención: ${CACHE_DAYS} días)..."
-
-    # Usa mtime y excluye rutas definidas en CACHE_EXCLUDE_PATHS.
 
     for home_dir in /home/*/; do
         [[ -d "$home_dir" ]] || continue
         local usuario; usuario=$(basename "$home_dir")
 
-        # Miniaturas.
+        # Miniaturas
         if [[ -d "${home_dir}.cache/thumbnails" ]]; then
             if [[ "${DRY_RUN:-false}" == true ]]; then
                 local n; n=$(find "${home_dir}.cache/thumbnails" -type f \
@@ -77,7 +87,7 @@ _cleanup_users() {
             fi
         fi
 
-        # Papelera.
+        # Papelera
         if [[ -d "${home_dir}.local/share/Trash" ]]; then
             run_tolerant "papelera de $usuario" bash -c \
                 "rm -rf '${home_dir}.local/share/Trash/files/'* \
@@ -85,7 +95,7 @@ _cleanup_users() {
             info "  Papelera de '$usuario' vaciada"
         fi
 
-        # Cache general con exclusiones definidas en config.
+        # Caché general con exclusiones de configuración
         if [[ -d "${home_dir}.cache" ]]; then
             local find_cmd=(find "${home_dir}.cache"
                 -mindepth 1 -maxdepth 3
@@ -109,6 +119,7 @@ _cleanup_users() {
     ok "Caché de usuarios procesada"
 }
 
+# Snap
 _cleanup_snap() {
     if ! command -v snap &>/dev/null; then
         info "Snap no instalado, paso omitido"

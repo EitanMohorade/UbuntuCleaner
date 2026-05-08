@@ -1,5 +1,5 @@
 #!/bin/bash
-# Chequeo de filesystem tolerable: si falla, se registra y continua.
+# Chequeo de filesystem tolerable: si falla, se registra y continúa.
 
 run_disk() {
     [[ "${ENABLE_FSCK:-true}" == true ]] || { info "ENABLE_FSCK=false, módulo omitido"; return 0; }
@@ -23,8 +23,7 @@ run_disk() {
 _fsck_ext() {
     local dev="$1" fs="$2"
 
-    # Programa un fsck puntual avanzando el contador de montajes,
-    # sin alterar la politica persistente del filesystem.
+    # Programa un fsck puntual sin cambiar la política persistente.
 
     local max_mnt; max_mnt=$(tune2fs -l "$dev" 2>/dev/null \
         | awk '/^Maximum mount count/{print $4}')
@@ -46,7 +45,7 @@ _fsck_ext() {
         ok "fsck puntual programado en próximo reinicio ($dev, $fs)"
         info "  Política sin cambios — max-mount-counts=$max_mnt"
     else
-        # max_mnt == -1: fsck por contador deshabilitado.
+        # max_mnt == -1 indica que el chequeo por contador está deshabilitado.
         warn "fsck por contador deshabilitado en $dev (max=-1)"
         warn "Para un chequeo manual: sudo fsck $dev"
         ERRORES_NO_CRITICOS+=("fsck deshabilitado en $dev")
@@ -64,7 +63,7 @@ _fsck_btrfs() {
 
 _fsck_xfs() {
     local dev="$1"
-    # xfs_repair -n solo verifica; no modifica datos.
+    # xfs_repair -n solo verifica.
     if [[ "${DRY_RUN:-false}" == true ]]; then
         info "  [DRY-RUN] Se ejecutaría xfs_repair -n $dev"
         return 0
