@@ -93,4 +93,4 @@ Resumen:
 - `state/`: estado de última ejecución.
 - `logs/`: logs de ejecución.
 
-Estructura detallada y actualizada en [FOLDER_STRUCTURE.md](FOLDER_STRUCTURE.md).
+Estructura detallada y actualizada en FOLDER_STRUCTURE.md.

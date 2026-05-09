@@ -96,6 +96,27 @@ _should_run() {
     return 0
 }
 
+_run_module_with_space_report() {
+    local module="$1"
+    local before after delta
+
+    before=$(get_used_bytes)
+    if "run_${module}"; then
+        after=$(get_used_bytes)
+        delta=$(( before - after ))
+
+        if (( delta > 0 )); then
+            ok "Módulo '${module}': $(format_space_change "$delta")"
+        elif (( delta < 0 )); then
+            warn "Módulo '${module}': $(format_space_change "$delta")"
+        else
+            info "Módulo '${module}': $(format_space_change "$delta")"
+        fi
+    else
+        return $?
+    fi
+}
+
 # Verifica privilegios de root.
 if [[ $EUID -ne 0 ]]; then
     echo -e "\033[0;31m  ✘ Ejecutar como root: sudo bash bin/mantenimiento.sh\033[0m"
@@ -132,7 +153,7 @@ MODULES_RAN=()
 
 for module in "${MODULES_AVAILABLE[@]}"; do
     if _should_run "$module"; then
-        "run_${module}"
+        _run_module_with_space_report "$module"
         MODULES_RAN+=("$module")
     else
         info "Módulo '${module}' omitido"

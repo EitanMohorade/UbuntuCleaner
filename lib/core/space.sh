@@ -22,3 +22,14 @@ format_bytes() {
     else                                       awk "BEGIN{printf \"%.2f GB\", $bytes/1024/1024/1024}"
     fi
 }
+
+format_space_change() {
+    local bytes="$1"
+    if (( bytes > 0 )); then
+        echo "$(format_bytes "$bytes") liberados"
+    elif (( bytes < 0 )); then
+        echo "aumentó el uso en $(format_bytes $(( -bytes )))"
+    else
+        echo "0 B sin cambio"
+    fi
+}

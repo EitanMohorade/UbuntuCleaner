@@ -50,6 +50,8 @@ EOF
   "space_after_bytes": ${space_after},
   "space_freed_bytes": ${freed},
   "space_freed_human": "$(format_bytes $(( freed > 0 ? freed : 0 )))",
+    "space_delta_bytes": ${freed},
+    "space_delta_human": "$(format_space_change "$freed")",
 ${report_counts_json}
   "modules_run": ${mods_json},
   "warnings": ${warnings_json}
