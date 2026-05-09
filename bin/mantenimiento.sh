@@ -9,6 +9,7 @@
 #   sudo bash bin/mantenimiento.sh --help
 
 set -euo pipefail
+trap 'echo "[FATAL] línea $LINENO: comando falló: $BASH_COMMAND"' ERR
 
 # Rutas del script.
 # readlink -f resuelve el symlink antes de calcular el directorio.
