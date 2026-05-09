@@ -30,12 +30,13 @@ sudo mantenimiento-ubuntu --help
 
 ## Módulos
 
-| Módulo | Qué hace | Política de errores |
-|---|---|---|
-| `apt` | update, upgrade, autoremove, clean | Crítica — detiene el script si falla |
-| `cleanup` | logs, /tmp, caché de usuarios, snap | Tolerable — registra y continúa |
-| `integrity` | dpkg repair (crítico), audit + debsums (tolerable) | Mixta |
-| `disk` | Programa fsck, btrfs scrub, o xfs_repair | Tolerable |
+- `apt`: mantenimiento de paquetes APT (crítico).
+- `cleanup`: limpieza general de sistema y cachés (tolerable).
+- `integrity`: validación/reparación de integridad de paquetes (mixta).
+- `disk`: tareas de mantenimiento de disco (tolerable).
+- `dev`: limpieza de entorno de desarrollo, dividida en submódulos (tolerable).
+
+Detalle completo en [FOLDER_STRUCTURE.md](FOLDER_STRUCTURE.md).
 
 ## Configuración
 
@@ -63,25 +64,13 @@ cp config/user.conf.example config/user.conf   # si existe
 
 ## Estructura
 
-```
-mantenimiento-ubuntu/
-├── bin/
-│   └── mantenimiento.sh      # entrypoint: args, orquestación, resumen
-├── lib/
-│   ├── core.sh               # logging, run_tolerant, maybe_run, get_used_mb
-│   ├── config.sh             # carga y validación de configuración
-│   ├── apt.sh                # módulo APT (crítico)
-│   ├── cleanup.sh            # módulo limpieza (tolerable)
-│   ├── integrity.sh          # módulo integridad (mixto)
-│   └── disk.sh               # módulo disco (tolerable)
-├── config/
-│   ├── default.conf          # valores por defecto (versionado)
-│   └── user.conf             # overrides personales (gitignored)
-├── state/
-│   └── last_run.json         # métricas de la última ejecución
-├── logs/
-│   └── YYYY-MM.log           # logs del script, rotados mensualmente
-├── install.sh                # instalación y cron opcional
-├── .gitignore
-└── README.md
-```
+Resumen:
+
+- `bin/`: entrypoint y orquestación.
+- `lib/`: módulos funcionales y utilidades comunes.
+- `lib/dev/`: submódulos del entorno de desarrollo.
+- `config/`: configuración por defecto.
+- `state/`: estado de última ejecución.
+- `logs/`: logs de ejecución.
+
+Estructura detallada y actualizada en [FOLDER_STRUCTURE.md](FOLDER_STRUCTURE.md).
