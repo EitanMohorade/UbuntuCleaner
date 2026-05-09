@@ -31,7 +31,7 @@ run_apt() {
 # Reparación solo cuando dpkg reporta paquetes rotos.
 _repair_if_needed() {
     local audit_output
-    audit_output=$(dpkg --audit 2>&1 || true)
+    audit_output=$(run_tolerant "dpkg audit" dpkg --audit)
 
     if [[ -z "$audit_output" ]]; then
         ok "Paquetes íntegros — reparación no necesaria"

@@ -45,8 +45,8 @@ _dev_package_managers() {
                 size=$(du -sh "${home_dir}.gradle/caches" 2>/dev/null | cut -f1)
                 info "  [DRY-RUN] $usuario Gradle cache: ${size} (archivos >$CACHE_DAYS días)"
             else
-                timeout 30 find "${home_dir}.gradle/caches" -type f -mtime +"$CACHE_DAYS" -delete 2>/dev/null || true
-                timeout 30 find "${home_dir}.gradle/caches" -type d -empty -delete 2>/dev/null || true
+                run_tolerant "gradle cache cleanup for $usuario" 30 find "${home_dir}.gradle/caches" -type f -mtime +"$CACHE_DAYS" -delete
+                run_tolerant "gradle empty dirs cleanup for $usuario" 30 find "${home_dir}.gradle/caches" -type d -empty -delete
                 ok "Gradle cache de '$usuario' limpiada"
             fi
         fi
@@ -59,16 +59,16 @@ _dev_package_managers() {
                 info "  [DRY-RUN] $usuario Maven repo: ${size} (solo se informa, no se limpia automáticamente)"
             else
                 info "  [DEBUG] Antes find Maven"
-                timeout 30 find "${home_dir}.m2/repository" \
+                run_tolerant "maven snapshots cleanup for $usuario" 30 find "${home_dir}.m2/repository" \
                     -type f \
                     -path "*-SNAPSHOT*" \
                     -mtime +"$CACHE_DAYS" \
-                    -delete 2>/dev/null || true
+                    -delete
                 info "  [DEBUG] Después find Maven"
 
                 info "  [DEBUG] Antes delete dirs vacíos"
-                timeout 30 find "${home_dir}.m2/repository" \
-                    -type d -empty -delete 2>/dev/null || true
+                run_tolerant "maven empty dirs cleanup for $usuario" 30 find "${home_dir}.m2/repository" \
+                    -type d -empty -delete
                 info "  [DEBUG] Después delete dirs vacíos"
                 ok "Maven snapshots viejos de '$usuario' eliminados"
             fi
@@ -77,5 +77,8 @@ _dev_package_managers() {
 
     if [[ "$found" == false ]]; then
         info "  Sin package managers detectados, omitido"
+        report_skip "dev/package-managers: sin herramientas detectadas"
+    else
+        report_ok "dev/package-managers: limpieza completada"
     fi
 }

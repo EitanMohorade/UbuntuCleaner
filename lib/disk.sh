@@ -25,8 +25,9 @@ _fsck_ext() {
 
     # Programa un fsck puntual sin cambiar la política persistente.
 
-    local max_mnt; max_mnt=$(tune2fs -l "$dev" 2>/dev/null \
-        | awk '/^Maximum mount count/{print $4}')
+    local tune_output
+    tune_output=$(run_tolerant "tune2fs -l $dev" tune2fs -l "$dev")
+    local max_mnt; max_mnt=$(printf "%s" "$tune_output" | awk '/^Maximum mount count/{print $4}')
 
     if [[ "${DRY_RUN:-false}" == true ]]; then
         info "  [DRY-RUN] Se avanzaría el contador de montajes en $dev ($fs)"

@@ -18,11 +18,13 @@ _dev_ides() {
                 found=true
                 if [[ "${DRY_RUN:-false}" == true ]]; then
                     local n
-                    n=$(timeout 30 find "$vscode_dir" -type f -mtime +"$CACHE_DAYS" 2>/dev/null | wc -l)
+                    local output
+                    output=$(run_with_timeout 30 "ides: conteo $vscode_dir" find "$vscode_dir" -type f -mtime +"$CACHE_DAYS")
+                    n=$(printf "%s" "$output" | wc -l)
                     info "  [DRY-RUN] $usuario VS Code: ${n} archivo(s) en $(basename "$vscode_dir")"
                 else
-                    timeout 30 find "$vscode_dir" -type f -mtime +"$CACHE_DAYS" -delete 2>/dev/null || true
-                    timeout 30 find "$vscode_dir" -type d -empty -delete 2>/dev/null || true
+                    run_tolerant "ides: limpiar $vscode_dir" 30 find "$vscode_dir" -type f -mtime +"$CACHE_DAYS" -delete
+                    run_tolerant "ides: limpiar dirs vacíos $vscode_dir" 30 find "$vscode_dir" -type d -empty -delete
                 fi
             fi
         done
@@ -35,11 +37,13 @@ _dev_ides() {
                 found=true
                 if [[ "${DRY_RUN:-false}" == true ]]; then
                     local n
-                    n=$(timeout 30 find "$jb_dir" -type f -mtime +"$CACHE_DAYS" 2>/dev/null | wc -l)
+                    local output
+                    output=$(run_with_timeout 30 "ides: conteo $jb_dir" find "$jb_dir" -type f -mtime +"$CACHE_DAYS")
+                    n=$(printf "%s" "$output" | wc -l)
                     info "  [DRY-RUN] $usuario JetBrains: ${n} archivo(s) en $(basename "$jb_dir")"
                 else
-                    timeout 30 find "$jb_dir" -type f -mtime +"$CACHE_DAYS" -delete 2>/dev/null || true
-                    timeout 30 find "$jb_dir" -type d -empty -delete 2>/dev/null || true
+                    run_tolerant "ides: limpiar $jb_dir" 30 find "$jb_dir" -type f -mtime +"$CACHE_DAYS" -delete
+                    run_tolerant "ides: limpiar dirs vacíos $jb_dir" 30 find "$jb_dir" -type d -empty -delete
                 fi
             fi
         done
@@ -47,7 +51,9 @@ _dev_ides() {
 
     if [[ "$found" == false ]]; then
         info "  Sin IDEs detectados (VS Code/JetBrains), omitido"
+        report_skip "dev/ides: sin IDEs detectados"
     else
         ok "Caché de IDEs limpiada"
+        report_ok "dev/ides: limpieza completada"
     fi
 }

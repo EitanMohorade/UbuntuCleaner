@@ -14,6 +14,7 @@ _dev_virtualization() {
             run_tolerant "limpiar logs libvirt" \
                 find /var/log/libvirt -type f -name "*.log" -mtime +"${LOG_DAYS}" -delete
             ok "Logs de libvirt depurados"
+            report_ok "dev/virtualization/libvirt: limpieza completada"
         fi
     fi
 
@@ -35,7 +36,7 @@ _dev_virtualization() {
                 vbox_vms_dir="${home_dir}VirtualBox VMs"
             fi
 
-            if ! timeout 2 ls "$vbox_vms_dir" >/dev/null 2>&1; then
+            if ! run_with_timeout 2 "dev/virtualization/vbox: acceso a VMs de '$usuario'" ls "$vbox_vms_dir" >/dev/null; then
                 warn "VMs de '$usuario': directorio no accesible o no existe - omitiendo"
                 continue
             fi
@@ -48,19 +49,19 @@ _dev_virtualization() {
 
                 if [[ "${DRY_RUN:-false}" == true ]]; then
                     local n
-                    n=$(timeout 30 find "$logs_dir" \
+                    local output
+                    output=$(run_with_timeout 30 "dev/virtualization/vbox: conteo logs $logs_dir" find "$logs_dir" \
+                        -maxdepth 1 -xdev -type f \
+                        \( -name "*.log" -o -name "*.log.*" \) \
+                        -mtime +"${LOG_DAYS}")
+                    n=$(printf "%s" "$output" | wc -l)
+                    total_n=$(( total_n + n ))
+                else
+                    run_tolerant "limpiar logs VirtualBox en $logs_dir" 30 find "$logs_dir" \
                         -maxdepth 1 -xdev -type f \
                         \( -name "*.log" -o -name "*.log.*" \) \
                         -mtime +"${LOG_DAYS}" \
-                        2>/dev/null | wc -l)
-                    total_n=$(( total_n + n ))
-                else
-                    run_tolerant "limpiar logs VirtualBox en $logs_dir" \
-                        timeout 30 find "$logs_dir" \
-                            -maxdepth 1 -xdev -type f \
-                            \( -name "*.log" -o -name "*.log.*" \) \
-                            -mtime +"${LOG_DAYS}" \
-                            -delete
+                        -delete
                 fi
             done
 
@@ -68,6 +69,7 @@ _dev_virtualization() {
                 info "  [DRY-RUN] $usuario - VirtualBox: ${total_n} log(s) a eliminar"
             else
                 ok "Logs de VirtualBox de '$usuario' depurados"
+                report_ok "dev/virtualization/virtualbox: limpieza completada para '$usuario'"
             fi
         done < <(_dev_user_homes)
 
@@ -76,6 +78,7 @@ _dev_virtualization() {
 
     if [[ "$found" == false ]]; then
         info "Sin VMs detectadas (libvirt/VirtualBox), omitido"
+        report_skip "dev/virtualization: sin VMs detectadas"
     fi
 
     info "  [DEBUG] Saliendo de _dev_virtualization"

@@ -4,11 +4,13 @@
 _dev_docker() {
     if ! command -v docker &>/dev/null; then
         info "Docker no instalado, omitido"
+        report_skip "dev/docker: no instalado"
         return 0
     fi
 
     if ! docker info &>/dev/null 2>&1; then
         warn "Docker instalado pero daemon no activo (skipping)"
+        report_warn "dev/docker: daemon no activo"
         return 0
     fi
 
@@ -34,7 +36,9 @@ _dev_docker() {
         run_tolerant "docker volume prune" docker volume prune -f
     else
         info "  Volúmenes Docker: omitido (ENABLE_DOCKER_VOLUME_PRUNE=false por defecto)"
+        report_skip "dev/docker: volume prune deshabilitado"
     fi
 
     ok "Docker limpio"
+    report_ok "dev/docker: limpieza completada"
 }

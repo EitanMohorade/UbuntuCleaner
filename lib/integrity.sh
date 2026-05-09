@@ -23,7 +23,7 @@ _repair_packages() {
 _audit_dpkg() {
     info "Auditando base de datos de dpkg..."
 
-    local audit; audit=$(dpkg --audit 2>&1 || true)
+    local audit; audit=$(run_tolerant "dpkg audit" dpkg --audit)
     if [[ -z "$audit" ]]; then
         ok "Base de datos de dpkg sin problemas"
     else
@@ -48,7 +48,7 @@ _check_debsums() {
         return 0
     fi
 
-    local debsums_out; debsums_out=$(debsums -s 2>&1 || true)
+    local debsums_out; debsums_out=$(run_tolerant "debsums -s" debsums -s)
     if [[ -z "$debsums_out" ]]; then
         ok "Todos los archivos de paquetes están íntegros"
     else
