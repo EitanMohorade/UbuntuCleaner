@@ -4,21 +4,21 @@
 _dev_virtualization() {
     local found=false
 
-    if command -v virsh &>/dev/null; then
+    if run_probe "virsh available" command -v virsh; then
         found=true
         info "libvirt detectado..."
 
-        if [[ "${DRY_RUN:-false}" == true ]]; then
-            info "  [DRY-RUN] Se limpiarían logs de libvirt en /var/log/libvirt/"
-        else
-            run_tolerant "limpiar logs libvirt" \
-                find /var/log/libvirt -type f -name "*.log" -mtime +"${LOG_DAYS}" -delete
+        previewable_run "limpiar logs libvirt" \
+            "Se limpiarían logs de libvirt en /var/log/libvirt/" \
+            find /var/log/libvirt -type f -name "*.log" -mtime +"${LOG_DAYS}" -delete
+        
+        if [[ "${DRY_RUN:-false}" != true ]]; then
             ok "Logs de libvirt depurados"
             report_ok "dev/virtualization/libvirt: limpieza completada"
         fi
     fi
 
-    if command -v vboxmanage &>/dev/null; then
+    if run_probe "vboxmanage available" command -v vboxmanage; then
         found=true
         info "VirtualBox detectado..."
 
@@ -42,14 +42,13 @@ _dev_virtualization() {
             fi
 
             local total_n=0
+            local cmds_to_run=()
+            
             for logs_dir in "$vbox_vms_dir"/*/Logs/; do
-                if [[ ! -d "$logs_dir" ]]; then
-                    continue
-                fi
-
+                [[ ! -d "$logs_dir" ]] && continue
+                
                 if [[ "${DRY_RUN:-false}" == true ]]; then
-                    local n
-                    local output
+                    local output n
                     output=$(run_with_timeout 30 "dev/virtualization/vbox: conteo logs $logs_dir" find "$logs_dir" \
                         -maxdepth 1 -xdev -type f \
                         \( -name "*.log" -o -name "*.log.*" \) \
@@ -57,6 +56,7 @@ _dev_virtualization() {
                     n=$(printf "%s" "$output" | wc -l)
                     total_n=$(( total_n + n ))
                 else
+                    # Accumulate commands for batch execution (or run individually)
                     run_tolerant "limpiar logs VirtualBox en $logs_dir" 30 find "$logs_dir" \
                         -maxdepth 1 -xdev -type f \
                         \( -name "*.log" -o -name "*.log.*" \) \
@@ -72,16 +72,12 @@ _dev_virtualization() {
                 report_ok "dev/virtualization/virtualbox: limpieza completada para '$usuario'"
             fi
         done < <(_dev_user_homes)
-
-        info "  [DEBUG] Loop VirtualBox completado"
     fi
 
     if [[ "$found" == false ]]; then
         info "Sin VMs detectadas (libvirt/VirtualBox), omitido"
         report_skip "dev/virtualization: sin VMs detectadas"
     fi
-
-    info "  [DEBUG] Saliendo de _dev_virtualization"
 }
 
 # Alias temporal para compatibilidad con codigo antiguo.

@@ -38,11 +38,11 @@ _check_debsums() {
 
     # Puede reportar cambios validos en archivos de configuracion.
 
-    if ! command -v debsums &>/dev/null; then
+    if ! run_probe "debsums available" command -v debsums; then
         run_tolerant "instalar debsums" apt install -y -qq debsums
     fi
 
-    if ! command -v debsums &>/dev/null; then
+    if ! run_probe "debsums available after install" command -v debsums; then
         warn "debsums no pudo instalarse, verificación omitida"
         ERRORES_NO_CRITICOS+=("debsums no disponible")
         return 0

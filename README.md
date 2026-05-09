@@ -28,15 +28,34 @@ sudo mantenimiento-ubuntu --skip=disk
 sudo mantenimiento-ubuntu --help
 ```
 
+## Inspeccionar Última Ejecución
+
+```bash
+# Ver reporte JSON detallado (con bytes liberados, eventos, conteos)
+jq . state/last_run.json
+
+# Ver logs de ejecución
+tail -f logs/$(date '+%Y-%m').log
+```
+
 ## Módulos
 
-- `apt`: mantenimiento de paquetes APT (crítico).
-- `cleanup`: limpieza general de sistema y cachés (tolerable).
-- `integrity`: validación/reparación de integridad de paquetes (mixta).
-- `disk`: tareas de mantenimiento de disco (tolerable).
-- `dev`: limpieza de entorno de desarrollo, dividida en submódulos (tolerable).
+- `apt`: actualización y limpieza de paquetes APT; reporta si se aplicaron actualizaciones (crítico).
+- `cleanup`: limpieza general de logs, `/tmp`, cachés de usuario y APT; mide bytes liberados (tolerable).
+- `integrity`: reparación/verificación de paquetes (`dpkg`, `debsums`, auditorías) (mixta).
+- `disk`: tareas de mantenimiento de disco (`fsck`, `btrfs scrub`, `xfs_repair`) (tolerable).
+- `dev`: limpieza de entorno de desarrollo, dividida en submódulos (Docker, VMs, IDEs, npm/pip/gradle/maven, bases de datos) (tolerable).
 
 Detalle completo en [FOLDER_STRUCTURE.md](FOLDER_STRUCTURE.md).
+
+## Reportes y Mediciones
+
+Cada módulo ahora reporta:
+- **Bytes liberados**: medición antes/después por acción (apt, journal, snap cache).
+- **Actualizaciones APT**: número real de paquetes actualizados (o "sin actualizaciones" si no había pendientes).
+- **Estado de ejecución**: OK (éxito), SKIP (no aplica), WARN (advertencia no crítica), TIMEOUT (timeout), ERROR (fallo tolerado).
+
+Todos los eventos se persisten en `state/last_run.json` para auditoría y diagnóstico.
 
 ## Configuración
 
@@ -55,7 +74,8 @@ cp config/user.conf.example config/user.conf   # si existe
 | `LOG_DAYS` | `7` | Días de logs de systemd a conservar |
 | `TMP_DAYS` | `1` | Antigüedad mínima (mtime) para limpiar `/tmp` |
 | `CACHE_DAYS` | `30` | Antigüedad mínima de caché de usuario |
-| `ENABLE_SNAP_CLEANUP` | `true` | Eliminar versiones antiguas de snap |
+| `JOURNAL_VACUUM_SIZE` | (vacío) | Límite de espacio para journal (ej: `200M`). Si no se define, usa `LOG_DAYS` |
+| `ENABLE_SNAP_CLEANUP` | `true` | Eliminar versiones antiguas de snap y limpiar caché |
 | `ENABLE_FSCK` | `true` | Programar chequeo de disco |
 | `ENABLE_DEBSUMS` | `true` | Verificar integridad con debsums |
 | `ENABLE_LOGROTATE` | `false` | Usar logrotate en vez de solo journalctl |

@@ -2,7 +2,7 @@
 # Limpieza de IDEs.
 
 _dev_ides() {
-    info "  [DEBUG] Entrando a _dev_ides"
+    
     info "Limpiando caché de IDEs..."
     local found=false
 

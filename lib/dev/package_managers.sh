@@ -5,36 +5,24 @@ _dev_package_managers() {
     info "Limpiando caché de package managers..."
     local found=false
 
-    if command -v npm &>/dev/null; then
+    if run_probe "npm available" command -v npm; then
         found=true
-        if [[ "${DRY_RUN:-false}" == true ]]; then
-            info "  [DRY-RUN] npm cache clean --force"
-        else
-            run_tolerant "npm cache clean" npm cache clean --force
-            ok "Caché npm limpiada"
-        fi
+        previewable_run "npm cache clean" "npm cache clean --force" npm cache clean --force
+        [[ "${DRY_RUN:-false}" != true ]] && ok "Caché npm limpiada"
     fi
 
-    if command -v pip3 &>/dev/null; then
+    if run_probe "pip3 available" command -v pip3; then
         found=true
         local pip_cmd
-        pip_cmd=$(command -v pip3)
-        if [[ "${DRY_RUN:-false}" == true ]]; then
-            info "  [DRY-RUN] pip cache purge"
-        else
-            run_tolerant "pip cache purge" "$pip_cmd" cache purge
-            ok "Caché pip limpiada"
-        fi
-    elif command -v pip &>/dev/null; then
+        pip_cmd=$(run_tolerant "get pip3 path" command -v pip3)
+        previewable_run "pip cache purge" "pip3 cache purge" "$pip_cmd" cache purge
+        [[ "${DRY_RUN:-false}" != true ]] && ok "Caché pip limpiada"
+    elif run_probe "pip available" command -v pip; then
         found=true
         local pip_cmd
-        pip_cmd=$(command -v pip)
-        if [[ "${DRY_RUN:-false}" == true ]]; then
-            info "  [DRY-RUN] pip cache purge"
-        else
-            run_tolerant "pip cache purge" "$pip_cmd" cache purge
-            ok "Caché pip limpiada"
-        fi
+        pip_cmd=$(run_tolerant "get pip path" command -v pip)
+        previewable_run "pip cache purge" "pip cache purge" "$pip_cmd" cache purge
+        [[ "${DRY_RUN:-false}" != true ]] && ok "Caché pip limpiada"
     fi
 
     while IFS=$'\t' read -r home_dir usuario; do
@@ -42,8 +30,8 @@ _dev_package_managers() {
             found=true
             if [[ "${DRY_RUN:-false}" == true ]]; then
                 local size
-                size=$(du -sh "${home_dir}.gradle/caches" 2>/dev/null | cut -f1)
-                info "  [DRY-RUN] $usuario Gradle cache: ${size} (archivos >$CACHE_DAYS días)"
+                size=$(run_with_timeout 30 "dev/package-managers: du gradle" du -sh "${home_dir}.gradle/caches" | cut -f1)
+                info "  [DRY-RUN] $usuario Gradle cache: ${size}"
             else
                 run_tolerant "gradle cache cleanup for $usuario" 30 find "${home_dir}.gradle/caches" -type f -mtime +"$CACHE_DAYS" -delete
                 run_tolerant "gradle empty dirs cleanup for $usuario" 30 find "${home_dir}.gradle/caches" -type d -empty -delete
@@ -55,21 +43,16 @@ _dev_package_managers() {
             found=true
             if [[ "${DRY_RUN:-false}" == true ]]; then
                 local size
-                size=$(du -sh "${home_dir}.m2/repository" 2>/dev/null | cut -f1)
-                info "  [DRY-RUN] $usuario Maven repo: ${size} (solo se informa, no se limpia automáticamente)"
+                size=$(run_with_timeout 30 "dev/package-managers: du maven" du -sh "${home_dir}.m2/repository" | cut -f1)
+                info "  [DRY-RUN] $usuario Maven repo: ${size}"
             else
-                info "  [DEBUG] Antes find Maven"
                 run_tolerant "maven snapshots cleanup for $usuario" 30 find "${home_dir}.m2/repository" \
                     -type f \
                     -path "*-SNAPSHOT*" \
                     -mtime +"$CACHE_DAYS" \
                     -delete
-                info "  [DEBUG] Después find Maven"
-
-                info "  [DEBUG] Antes delete dirs vacíos"
                 run_tolerant "maven empty dirs cleanup for $usuario" 30 find "${home_dir}.m2/repository" \
                     -type d -empty -delete
-                info "  [DEBUG] Después delete dirs vacíos"
                 ok "Maven snapshots viejos de '$usuario' eliminados"
             fi
         fi

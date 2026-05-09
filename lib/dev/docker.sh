@@ -2,13 +2,13 @@
 # Limpieza de Docker.
 
 _dev_docker() {
-    if ! command -v docker &>/dev/null; then
+    if ! run_probe "docker available" command -v docker; then
         info "Docker no instalado, omitido"
         report_skip "dev/docker: no instalado"
         return 0
     fi
 
-    if ! docker info &>/dev/null 2>&1; then
+    if ! run_probe "docker daemon active" docker info; then
         warn "Docker instalado pero daemon no activo (skipping)"
         report_warn "dev/docker: daemon no activo"
         return 0
@@ -17,9 +17,12 @@ _dev_docker() {
     info "Limpiando recursos Docker..."
 
     if [[ "${DRY_RUN:-false}" == true ]]; then
-        local containers; containers=$(docker ps -aq --filter status=exited 2>/dev/null | wc -l)
-        local images; images=$(docker images -qf dangling=true 2>/dev/null | wc -l)
-        local volumes; volumes=$(docker volume ls -qf dangling=true 2>/dev/null | wc -l)
+        local containers
+        containers=$(run_with_timeout 30 "dev/docker: conteo containers" docker ps -aq --filter status=exited | wc -l)
+        local images
+        images=$(run_with_timeout 30 "dev/docker: conteo images" docker images -qf dangling=true | wc -l)
+        local volumes
+        volumes=$(run_with_timeout 30 "dev/docker: conteo volumes" docker volume ls -qf dangling=true | wc -l)
         info "  [DRY-RUN] Containers detenidos: ${containers}"
         info "  [DRY-RUN] Imágenes dangling:    ${images}"
         info "  [DRY-RUN] Volúmenes huérfanos:  ${volumes}"

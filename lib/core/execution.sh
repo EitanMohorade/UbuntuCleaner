@@ -118,3 +118,20 @@ run_with_timeout() {
         return $rc
     fi
 }
+
+# Centralized DRY_RUN handler: eliminates if/else duplication in modules.
+# In DRY_RUN mode: shows preview text.
+# In real mode: executes command with run_tolerant.
+# Usage: previewable_run "description" "preview text to show" cmd arg1 arg2
+# Example: previewable_run "apt clean" "apt-get clean" apt-get clean
+previewable_run() {
+    local desc="$1"; shift
+    local preview_text="$1"; shift
+
+    if [[ "${DRY_RUN:-false}" == true ]]; then
+        info "  [DRY-RUN] $preview_text"
+        return 0
+    fi
+
+    run_tolerant "$desc" "$@"
+}
